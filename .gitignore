@@ -1,0 +1,8 @@
+__pycache__
+**.DS_Store
+.vscode
+.aws-sam
+s3/
+*.xlsx
+*.csv
+*.log
