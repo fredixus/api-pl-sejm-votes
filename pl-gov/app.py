@@ -1,6 +1,7 @@
 import json
 import math
 import boto3
+import os
 from ast import literal_eval
 
 with open ("secrets.json") as file:
@@ -61,14 +62,11 @@ def validPath(path):
     if(validList(path) == True):
         path = path.replace('/list','')
     
-    if(validDeputiesVotes(path) == True):
-        path = path.replace('/deputiesVotes','')
-    
     path = '0'+path
     path_list = path.split("/")
     length = len(path_list)
     emptyPathTextFlag = False
-
+    
     # Look for empty text
     for el in path_list:
         if checkIfEmptyString(el) == True:
@@ -122,7 +120,7 @@ def replaceEmptyEventObject(eventObject, replacement, event):
             requestedParameter = replacement
     return requestedParameter
     
-def orderFiles(files):
+def orderFiles(files, votes):
     deputiesVotes = []
     old = []
     for el in files:
@@ -130,13 +128,12 @@ def orderFiles(files):
             deputiesVotes.append(el)
         else:
             old.append(el)
-            
-    return deputiesVotes if old == [] else old
+    return deputiesVotes if votes else old
     #return old + deputiesVotes
 
-def getFilesPerPages(files, event, page_size, path):
+def getFilesPerPages(files, event, page_size, path, votes):
     root = '/default/pl-gov'
-    files = orderFiles(files)
+    files = orderFiles(files, votes)
     total_pages = math.ceil(len(files) / page_size)
     total_pages = 1 if total_pages == 0 else total_pages
     page_num = int(replaceEmptyEventObject('queryStringParameters', {'page':1}, event)['page'])
@@ -166,7 +163,8 @@ def getFilesPerPages(files, event, page_size, path):
         }
     
 def lambda_handler(event, context):
-    page_size = 10
+    page_size = 5
+    votes = False
     print('Event: ', event)
     path = clearPath(event['path'])
     try:
@@ -177,24 +175,35 @@ def lambda_handler(event, context):
     print(body)    
     requestedFile = replaceEmptyEventObject('file', '*', body)
     print(requestedFile)
+    
+    if(validDeputiesVotes(path) == True):
+        path = path.replace('/deputiesVotes','')
+        votes = True
         
     if(validList(path) == False and (path is not None) and (validPath(path) and (requestedFile != "*")) and (len(body['file']) >= 1)):
         # Return multiple files
-        files = composePathToFiles(storage, path, body['file'])
-        body = getFilesPerPages(files, event, page_size, path)
+        #files = composePathToFiles(storage, path, body['file'])
+        listFiles = list(getFileList(s3, bucket, prefix=path))
+        files = []
+        for file in body['file']:
+            for file_from_dir in listFiles:
+                if file_from_dir.find(file) > -1:
+                    files.append(file_from_dir)
+                
+        body = getFilesPerPages(files, event, page_size, path, votes)
         return composeResponse(200, body, True)
 
     elif(validList(path) == False and (path is not None) and (validPath(path) and (requestedFile == '*'))):
         # Return all files
         listFiles = list(getFileList(s3, bucket, prefix=path))
-        body = getFilesPerPages(listFiles, event, page_size, path)
+        body = getFilesPerPages(listFiles, event, page_size, path, votes)
         return composeResponse(200, body, True)
         
     elif(validList(path) == True and (path is not None) and validPath(path) ):
         # List files
         path = path.replace('/list','')
         listFiles = list(getFileList(s3, bucket, prefix=path))
-        listFiles = orderFiles(listFiles)
+        listFiles = orderFiles(listFiles, votes)
         return  composeResponse(200, {"files":listFiles})
         
     elif(validList(path) == False and (path is not None) and path == "/"):
