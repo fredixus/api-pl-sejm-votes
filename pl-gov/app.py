@@ -136,6 +136,7 @@ def orderFiles(files):
 
 def getFilesPerPages(files, event, page_size, path):
     root = '/default/pl-gov'
+    files = orderFiles(files)
     total_pages = math.ceil(len(files) / page_size)
     total_pages = 1 if total_pages == 0 else total_pages
     page_num = int(replaceEmptyEventObject('queryStringParameters', {'page':1}, event)['page'])
@@ -154,7 +155,7 @@ def getFilesPerPages(files, event, page_size, path):
     if page_num > 1:
         prev_link = f"{root}{path}?page={page_num - 1}"
         
-    files = orderFiles(files)
+    
     files = getFiles(files[start:end])
         
     return {
